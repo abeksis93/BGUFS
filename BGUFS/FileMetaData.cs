@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,10 +15,10 @@ namespace BGUFS
         private DateTime fileDate;
         private string status;
         private string linkedFileName;
-        private byte[] fileData;
+        private string fileData;
 
 
-        public FileMetaData(string name, long size, DateTime date, string stat, byte[] data, string linked = null)
+        public FileMetaData(string name, long size, DateTime date, string stat, string data, string linked = null)
         {
             this.fileName = name;
             this.fileSize = size;
@@ -31,13 +32,13 @@ namespace BGUFS
         public void setFileName(string name) { this.fileName = name; }
         public void setFileSize(long size) { this.fileSize = size; }
         public void setFileDate(DateTime date) { this.fileDate = date; }
-        public void setFileData(byte[] data) { this.fileData = data; }
+        public void setFileData(string data) { this.fileData = data; }
 
         // Getters
         public string getFileName() { return this.fileName; }
         public long getFileSize() { return this.fileSize; }
         public DateTime getFileDate() { return this.fileDate; }
-        public byte[] getFileData() { return this.fileData; }
+        public string getFileData() { return this.fileData; }
 
 
         // print method
@@ -52,6 +53,7 @@ namespace BGUFS
                 Console.WriteLine("{0},{1},{2},{3},{4}", this.fileName, this.fileSize.ToString(), this.fileDate.ToString(), this.status, this.linkedFileName); ;
             }
         }
+
 
     }
 }
