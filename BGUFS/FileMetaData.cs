@@ -9,12 +9,12 @@ namespace BGUFS
     [Serializable]
     class FileMetaData
     {
-        string fileName;
-        long fileSize;
-        DateTime fileDate;
-        string status;
-        string linkedFileName;
-        byte[] fileData;
+        private string fileName;
+        private long fileSize;
+        private DateTime fileDate;
+        private string status;
+        private string linkedFileName;
+        private byte[] fileData;
 
 
         public FileMetaData(string name, long size, DateTime date, string stat, byte[] data, string linked = null)
