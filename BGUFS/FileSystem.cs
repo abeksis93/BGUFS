@@ -72,12 +72,50 @@ namespace BGUFS
             }
 
             FileInfo fi = new FileInfo(filename);
-            FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, System.IO.File.ReadAllBytes(filename));
+            FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", System.IO.File.ReadAllBytes(filename));
             dict.Add(filename, fmd);
-            create(filesystem);
+            update(filesystem);
             return true;
         }
 
+
+        // remove 
+
+        // rename
+
+        //extract 
+
+
+        public bool dir(string filesystem)
+        {
+            readFileSystem(filesystem);
+            foreach (FileMetaData fmd in dict.Values)
+            {
+                fmd.printFileMetaData();
+            }
+            return true;
+        }
+
+        private bool update(string fileSystemPath)
+        {
+            try
+            {
+                // Create the file, or overwrite if the file exists.
+                using (FileStream fs = File.Create(fileSystemPath))
+                {
+                    byte[] info = ObjectToByteArray(this.dict);
+                    // Add some information to the file.
+                    fs.Write(info, 0, info.Length);
+                }
+            }
+
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+                return false;
+            }
+            return true;
+        }
 
         private bool readFileSystem(string fileSystemPath)
         {
@@ -112,12 +150,12 @@ namespace BGUFS
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
             string filePath = "MYBGUFS.dat";
             string filename = @"C:\Users\yoni9\source\repos\BGUFS\test.txt";
             FileSystem fs = new FileSystem();
             fs.create(filePath);
             fs.add(filePath, filename);
+            fs.dir(filePath);
         }
     }
 }
