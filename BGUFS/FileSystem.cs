@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace BGUFS
@@ -13,31 +14,6 @@ namespace BGUFS
 
         public FileSystem()
         {
-        }
-
-        // Convert an object to a byte array
-        private byte[] ObjectToByteArray(Object obj)
-        {
-            if (obj == null)
-                return null;
-
-            BinaryFormatter bf = new BinaryFormatter();
-            MemoryStream ms = new MemoryStream();
-            bf.Serialize(ms, obj);
-
-            return ms.ToArray();
-        }
-
-        // Convert a byte array to an Object
-        private Object ByteArrayToObject(byte[] arrBytes)
-        {
-            MemoryStream memStream = new MemoryStream();
-            BinaryFormatter binForm = new BinaryFormatter();
-            memStream.Write(arrBytes, 0, arrBytes.Length);
-            memStream.Seek(0, SeekOrigin.Begin);
-            Object obj = (Object)binForm.Deserialize(memStream);
-
-            return obj;
         }
 
         public bool create(string fileSystemPath)
@@ -71,7 +47,7 @@ namespace BGUFS
                 Console.WriteLine("file already exist");
                 return false;
             }
-            FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", EncodeFile(filename));
+            FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", EncodeFile(filename), generateMD5Hash(filename), this.dict.Count);
             dict.Add(fi.Name, fmd);
             update(filesystem);
             return true;
@@ -172,9 +148,28 @@ namespace BGUFS
             return true;
         }
 
-        private	string generateMD5Hash(string filename)
+        private string generateMD5Hash(string filename)
         {
-            return "";
+            using (var md5Instance = MD5.Create())
+            {
+                using (var stream = File.OpenRead(filename))
+                {
+                    var hashResult = md5Instance.ComputeHash(stream);
+                    return BitConverter.ToString(hashResult);
+                }
+            }
+        }
+
+        private int listContains(List<FileMetaData> fmdLst, string filename)
+        {
+            for (int i = 0; i < fmdLst.Count; i++)
+            {
+                if (fmdLst[i].getFileName().Equals(filename))
+                {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         private void DecodeFile(string srcfile, string destfile)
@@ -198,6 +193,30 @@ namespace BGUFS
             return System.Convert.ToBase64String(srcbt);
         }
 
+        // Convert an object to a byte array
+        private byte[] ObjectToByteArray(Object obj)
+        {
+            if (obj == null)
+                return null;
+
+            BinaryFormatter bf = new BinaryFormatter();
+            MemoryStream ms = new MemoryStream();
+            bf.Serialize(ms, obj);
+
+            return ms.ToArray();
+        }
+
+        // Convert a byte array to an Object
+        private Object ByteArrayToObject(byte[] arrBytes)
+        {
+            MemoryStream memStream = new MemoryStream();
+            BinaryFormatter binForm = new BinaryFormatter();
+            memStream.Write(arrBytes, 0, arrBytes.Length);
+            memStream.Seek(0, SeekOrigin.Begin);
+            Object obj = (Object)binForm.Deserialize(memStream);
+
+            return obj;
+        }
         static void Main(string[] args)
         {
             string filePath = "MYBGUFS.dat";
