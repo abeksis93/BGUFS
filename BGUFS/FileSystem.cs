@@ -2,13 +2,15 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace BGUFS
 {
     class FileSystem
     {
-        Dictionary<string, FileMetaData> dict;
+        //Dictionary<string, FileMetaData> dict;
+        List<FileMetaData> lst;
         string path;
 
         public FileSystem()
@@ -42,13 +44,13 @@ namespace BGUFS
 
         public bool create(string fileSystemPath)
         {
-            dict = new Dictionary<string, FileMetaData>();
+            lst = new List<FileMetaData>();
             try
             {
                 // Create the file, or overwrite if the file exists.
                 using (FileStream fs = File.Create(fileSystemPath))
                 {
-                    byte[] info = ObjectToByteArray(dict);
+                    byte[] info = ObjectToByteArray(lst);
                     // Add some information to the file.
                     fs.Write(info, 0, info.Length);
                 }
@@ -66,13 +68,14 @@ namespace BGUFS
         {
             readFileSystem(filesystem);
             FileInfo fi = new FileInfo(filename);
-            if (this.dict.ContainsKey(fi.Name))
+            int fileIdx = listContains(this.lst, fi.Name);
+            if (fileIdx != -1)
             {
                 Console.WriteLine("file already exist");
                 return false;
             }
-            FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", EncodeFile(filename));
-            dict.Add(fi.Name, fmd);
+            FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", EncodeFile(filename), generateMD5Hash(filename), fileIdx+1);
+            this.lst.Add(fmd);
             update(filesystem);
             return true;
         }
@@ -140,7 +143,7 @@ namespace BGUFS
                 // Create the file, or overwrite if the file exists.
                 using (FileStream fs = File.Create(fileSystemPath))
                 {
-                    byte[] info = ObjectToByteArray(this.dict);
+                    byte[] info = ObjectToByteArray(this.lst);
                     // Add some information to the file.
                     fs.Write(info, 0, info.Length);
                 }
@@ -152,6 +155,54 @@ namespace BGUFS
                 return false;
             }
             return true;
+        }
+
+        private bool update(string fileSystemPath)
+        {
+            using (var sw = new StreamWriter(path))
+            {
+                for (var i = 2; i <= 75; i++)
+                {
+                    sw.WriteLine("Error_Flag = 'FOR_IMPORT' and location_type =   'Home' and batch_num = {0}", i);
+                }
+            }
+        }
+
+            private void copyData(string fileSystemPath, string target, int line_to_edit)
+        {
+            //int line_to_edit = 2; // Warning: 1-based indexing!
+            string sourceFile = "source.txt";
+            string destinationFile = "target.txt";
+
+            // Read the appropriate line from the file.
+            string lineToWrite = null;
+            using (StreamReader reader = new StreamReader(sourceFile))
+            {
+                for (int i = 1; i <= line_to_edit; ++i)
+                    lineToWrite = reader.ReadLine();
+            }
+
+            if (lineToWrite == null)
+                throw new InvalidDataException("Line does not exist in " + sourceFile);
+
+            // Read the old file.
+            string[] lines = File.ReadAllLines(destinationFile);
+
+            // Write the new file over the old file.
+            using (StreamWriter writer = new StreamWriter(destinationFile))
+            {
+                for (int currentLine = 1; currentLine <= lines.Length; ++currentLine)
+                {
+                    if (currentLine == line_to_edit)
+                    {
+                        writer.WriteLine(lineToWrite);
+                    }
+                    else
+                    {
+                        writer.WriteLine(lines[currentLine - 1]);
+                    }
+                }
+            }
         }
 
         private bool readFileSystem(string fileSystemPath)
@@ -174,7 +225,26 @@ namespace BGUFS
 
         private	string generateMD5Hash(string filename)
         {
-            return "";
+            using (var md5Instance = MD5.Create())
+            {
+                using (var stream = File.OpenRead(filename))
+                {
+                    var hashResult = md5Instance.ComputeHash(stream);
+                    return BitConverter.ToString(hashResult);
+                }
+            }
+        }
+
+        private int listContains(List<FileMetaData> fmdLst, string filename)
+        {
+            for(int i = 0; i < fmdLst.Count; i++)
+            {
+                if (fmdLst[i].getFileName().Equals(filename))
+                {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         private void DecodeFile(string srcfile, string destfile)
