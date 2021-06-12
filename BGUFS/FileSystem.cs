@@ -65,27 +65,55 @@ namespace BGUFS
         public bool add(string filesystem, string filename)
         {
             readFileSystem(filesystem);
-            if (this.dict.ContainsKey(filename))
+            FileInfo fi = new FileInfo(filename);
+            if (this.dict.ContainsKey(fi.Name))
             {
                 Console.WriteLine("file already exist");
                 return false;
             }
-
-            FileInfo fi = new FileInfo(filename);
             FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", EncodeFile(filename));
-            dict.Add(filename, fmd);
+            dict.Add(fi.Name, fmd);
             update(filesystem);
             return true;
         }
 
+        public bool remove(string filesystem, string filename)
+        {
+            readFileSystem(filesystem);
+            if (!this.dict.ContainsKey(filename))
+            {
+                Console.WriteLine("file does not exist");
+                return false;
+            }
+            this.dict.Remove(filename);
+            update(filesystem);
+            return true;
+        }
 
-        // remove 
+        public bool rename(string filesystem, string filename, string newfilename)
+        {
+            readFileSystem(filesystem);
+            if (!this.dict.ContainsKey(filename))
+            {
+                Console.WriteLine("file does not exist");
+                return false;
+            }
+            if (this.dict.ContainsKey(newfilename))
+            {
+                Console.WriteLine("file {0} already exists", newfilename);
+                return false;
+            }
+            FileMetaData file = this.dict[filename];
+            file.setFileName(newfilename);
+            this.dict.Remove(filename);
+            dict.Add(newfilename, file);
+            update(filesystem);
+            return true;
+        }
 
-        // rename
-
-        // extract 
         public bool extract(string filesystem, string filename, string target)
         {
+            readFileSystem(filesystem);
             if (!this.dict.ContainsKey(filename))
             {
                 Console.WriteLine("file does not exist");
@@ -185,6 +213,14 @@ namespace BGUFS
             string target4 = @"C:\Users\yoni9\Desktop\testfldr\target\pdftest.pdf";
             string target5 = @"C:\Users\yoni9\Desktop\testfldr\target\pttxtest.pptx";
             string target6 = @"C:\Users\yoni9\Desktop\testfldr\target\xslxtest.xlsx";
+            string filenameclean1 = "txttest.txt";
+            string filenameclean2 = "pngtest.png";
+            string filenameclean3 = "docxtest.docx";
+            string filenameclean4 = "pdftest.pdf";
+            string filenameclean5 = "pttxtest.pptx";
+            string filenameclean6 = "xslxtest.xlsx";
+            string fileRenameTest = "testRename1.txt";
+            string fileExractAfterRenameTest = @"C:\Users\yoni9\Desktop\testfldr\target\testExractAfterRename.txt";
             FileSystem fs = new FileSystem();
             fs.create(filePath);
             fs.add(filePath, filename1);
@@ -201,14 +237,31 @@ namespace BGUFS
             fs.add(filePath, filename6);
             fs.dir(filePath);
             Console.WriteLine("--------------------------------");
-            fs.extract(filePath, filename1, target1);
-            fs.extract(filePath, filename2, target2);
-            fs.extract(filePath, filename3, target3);
-            fs.extract(filePath, filename4, target4);
-            fs.extract(filePath, filename5, target5);
-            fs.extract(filePath, filename6, target6);
+            fs.extract(filePath, filenameclean1, target1);
+            fs.extract(filePath, filenameclean2, target2);
+            fs.extract(filePath, filenameclean3, target3);
+            fs.extract(filePath, filenameclean4, target4);
+            fs.extract(filePath, filenameclean5, target5);
+            fs.extract(filePath, filenameclean6, target6);
             fs.dir(filePath);
             Console.WriteLine("--------------------------------");
+            fs.remove(filePath, filenameclean4);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.remove(filePath, filenameclean4);
+            Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
+            Console.WriteLine("--------------------------------");
+            fs.rename(filePath, filenameclean1, fileRenameTest);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.rename(filePath, filenameclean1, fileRenameTest);
+            Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
+            Console.WriteLine("--------------------------------");
+            fs.rename(filePath, filenameclean2, fileRenameTest);
+            Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
+            Console.WriteLine("--------------------------------");
+            fs.extract(filePath, fileRenameTest, fileExractAfterRenameTest);
+
         }
     }
 }
