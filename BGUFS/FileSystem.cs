@@ -22,6 +22,7 @@ namespace BGUFS
         {
             string fileSystemChecker = "BGUFS_";
             dict = new Dictionary<string, FileMetaData>();
+            holeIndexes = new List<int>();
             try
             {
                 // Create the file, or overwrite if the file exists.
@@ -67,7 +68,9 @@ namespace BGUFS
             int fileStartIndex = this.dict.Count + 3;
             FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", fileStartIndex);
             dict.Add(fi.Name, fmd);
+            Console.WriteLine("before update");
             update(filesystem);
+            Console.WriteLine("after update");
             return true;
         }
 
@@ -127,40 +130,40 @@ namespace BGUFS
             return true;
         }
 
-        private bool update(string fileSystemPath)
-        {
-            string fileSystemChecker = "BGUFS_";
-            try
-            {
-                // Create the file, or overwrite if the file exists.
-                using (FileStream fs = new FileStream(fileSystemPath, FileMode.Append, FileAccess.Write))
-                using (StreamWriter sw = new StreamWriter(fs))
-                {
-                    byte[] fscInBytes = ObjectToByteArray(fileSystemChecker);
-                    byte[] dictInfo = ObjectToByteArray(this.dict);
-                    byte[] holeBytes = ObjectToByteArray(this.holeIndexes);
-                    //int fscLength = fscInBytes.Length;
-                    //int dictInfoLength = dictInfo.Length;
-                    byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
+        //private bool update(string fileSystemPath)
+        //{
+        //    string fileSystemChecker = "BGUFS_";
+        //    try
+        //    {
+        //        // Create the file, or overwrite if the file exists.
+        //        using (FileStream fs = new FileStream(fileSystemPath, FileMode.Append, FileAccess.Write))
+        //        using (StreamWriter sw = new StreamWriter(fs))
+        //        {
+        //            byte[] fscInBytes = ObjectToByteArray(fileSystemChecker);
+        //            byte[] dictInfo = ObjectToByteArray(this.dict);
+        //            byte[] holeBytes = ObjectToByteArray(this.holeIndexes);
+        //            //int fscLength = fscInBytes.Length;
+        //            //int dictInfoLength = dictInfo.Length;
+        //            byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
 
-                    // Add some information to the file.
-                    //sw.WriteLine(fscLength.ToString());
-                    //sw.WriteLine(dictInfoLength.ToString());
-                    //sw.Flush();
-                    fs.Write(fscInBytes);
-                    fs.Write(newLine);
-                    fs.Write(dictInfo);
-                    fs.Write(newLine);
-                    fs.Write(holeBytes);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-                return false;
-            }
-            return true;
-        }
+        //            // Add some information to the file.
+        //            //sw.WriteLine(fscLength.ToString());
+        //            //sw.WriteLine(dictInfoLength.ToString());
+        //            //sw.Flush();
+        //            fs.Write(fscInBytes);
+        //            fs.Write(newLine);
+        //            fs.Write(dictInfo);
+        //            fs.Write(newLine);
+        //            fs.Write(holeBytes);
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine(ex.ToString());
+        //        return false;
+        //    }
+        //    return true;
+        //}
 
         private byte[] SubArray(byte[] data, int index, int length)
         {
@@ -178,16 +181,18 @@ namespace BGUFS
                 byte[] temp;
                 int counter = 0;
                 int pastI = -1;
+                //char[] arrStr = System.Text.Encoding.UTF8.GetString(arr).ToCharArray();
                 for (int i = 0; i < arr.Length; i++)
                 {
-                    if (arr[i].Equals("\n"))
+                    if (arr[i] == 0xA)
                     {
                         if (counter == 0)
                         {
                             pastI = i;
                             temp = SubArray(arr, 0, pastI);
-                            string str = Encoding.Default.GetString(temp);
-                            if (! str.Equals("BGUFS_"))
+                            string str = Encoding.UTF8.GetString(temp);
+                            Console.WriteLine(str);
+                            if (! str.Contains("BGUFS_"))
                             {
                                 Console.WriteLine("Not a BGUFS file");
                                 return false;
@@ -197,14 +202,18 @@ namespace BGUFS
                         {
                             temp = SubArray(arr, pastI + 1, i);
                             pastI = i;
-                            Object dictObj = ByteArrayToObject(arr);
+                            Object dictObj = ByteArrayToObject(temp);
                             this.dict = (Dictionary<string, FileMetaData>)dictObj;
                         }
                         else if (counter == 2)
                         {
                             temp = SubArray(arr, pastI + 1, i);
-                            Object listObj = ByteArrayToObject(arr);
+                            Object listObj = ByteArrayToObject(temp);
                             this.holeIndexes = (List<int>)listObj;
+                        }
+                        else
+                        {
+                            break;
                         }
                         counter++;
                     }
@@ -219,7 +228,78 @@ namespace BGUFS
             return true;
         }
 
-       
+
+
+        private bool update(string fileSystemPath)
+        {
+            try
+            {
+                //create new file = "tmp.dat"
+                //copy old file to new
+                //insted of copy old dict write new  dict in byte[]
+                // " " " holesIndexs " " " " "
+                //delete old file
+                //rename "tmp.dat" => "MYBGUFS.dat"
+                byte[] arr = File.ReadAllBytes(fileSystemPath);
+                string tmpFilePath = "tmp.dat";
+                char[] arrStr = System.Text.Encoding.UTF8.GetString(arr).ToCharArray();
+                using (FileStream fs = new FileStream(tmpFilePath, FileMode.Append, FileAccess.Write))
+                using (StreamWriter sw = new StreamWriter(fs))
+                {
+                    byte[] temp;
+                    int counter = 0;
+                    int pastI = -1;
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        if (arr[i] == 0xA)
+                        {
+                            if (counter == 0)
+                            {
+                                pastI = i;
+                                temp = SubArray(arr, 0, pastI);
+                                string str = Encoding.UTF8.GetString(temp);
+                                if (!str.Contains("BGUFS_"))
+                                {
+                                    Console.WriteLine("Not a BGUFS file");
+                                    return false;
+                                }
+                                fs.Write(temp);
+                            }
+                            else if (counter == 1)
+                            {
+                                temp = SubArray(arr, pastI + 1, i);
+                                pastI = i;
+                                fs.Write(ObjectToByteArray(this.dict));
+                            }
+                            else if (counter == 2)
+                            {
+                                temp = SubArray(arr, pastI + 1, i);
+                                pastI = i;
+                                fs.Write(ObjectToByteArray(this.holeIndexes));
+                            }
+                            else
+                            {
+                                temp = SubArray(arr, pastI + 1, i);
+                                pastI = i;
+                                fs.Write(temp);
+                            }
+                            counter++;
+                        }
+                    }
+                }
+                File.Delete(fileSystemPath);
+                File.Move(tmpFilePath, fileSystemPath);
+            }
+
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+                return false;
+            }
+            return true;
+        }
+
+
         private string generateMD5Hash(string filename)
         {
             using (var md5Instance = MD5.Create())
@@ -277,6 +357,34 @@ namespace BGUFS
 
             return ms.ToArray();
         }
+        //private void ReplaceFile(string FilePath, string NewFilePath)
+        //{
+        //    using (StreamReader vReader = new StreamReader(FilePath))
+        //    {
+        //        using (StreamWriter vWriter = new StreamWriter(NewFilePath))
+        //        {
+        //            int vLineNumber = 0;
+        //            while (!vReader.EndOfStream)
+        //            {
+        //                string vLine = vReader.ReadLine();
+        //                if (vLineNumber == 0)
+        //                {
+        //                    continue;
+        //                }
+        //                else if(vLineNumber == 1)
+        //                {
+        //                    vWriter.WriteLine(ObjectToByteArray(this.dict));
+        //                }
+        //                else if (vLineNumber == 2)
+        //                {
+        //                    vWriter.WriteLine(ObjectToByteArray(this.holeIndexes));
+        //                }
+        //                vLineNumber++;
+        //            }
+        //        }
+        //    }
+        //}
+
 
         // Convert a byte array to an Object
         private Object ByteArrayToObject(byte[] arrBytes)
@@ -292,7 +400,7 @@ namespace BGUFS
         static void Main(string[] args)
         {
             string filePath = "MYBGUFS.dat";
-            //string filename1 = @"C:\Users\yoni9\Desktop\testfldr\src\txttest.txt";
+            string filename1 = @"C:\Users\yoni9\Desktop\testfldr\src\txttest.txt";
             //string filename2 = @"C:\Users\yoni9\Desktop\testfldr\src\pngtest.png"; 
             //string filename3 = @"C:\Users\yoni9\Desktop\testfldr\src\docxtest.docx";
             //string filename4 = @"C:\Users\yoni9\Desktop\testfldr\src\pdftest.pdf";
@@ -314,7 +422,7 @@ namespace BGUFS
             //string fileExractAfterRenameTest = @"C:\Users\yoni9\Desktop\testfldr\target\testExractAfterRename.txt";
             FileSystem fs = new FileSystem();
             fs.create(filePath);
-            fs.add(filePath, filenameclean1);
+            fs.add(filePath, filename1);
             //fs.add(filePath, filename2);
             //fs.dir(filePath);
             //fs.extract(filePath, filename3, target3);
