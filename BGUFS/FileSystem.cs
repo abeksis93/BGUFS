@@ -32,14 +32,8 @@ namespace BGUFS
                     byte[] fscInBytes = ObjectToByteArray(fileSystemChecker);
                     byte[] dictInfo = ObjectToByteArray(dict);
                     byte[] holeBytes = ObjectToByteArray(holeIndexes);
-                    //int fscLength = fscInBytes.Length;
-                    //int dictInfoLength = dictInfo.Length;
                     byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
 
-                    // Add some information to the file.
-                    //sw.WriteLine(fscLength.ToString());
-                    //sw.WriteLine(dictInfoLength.ToString());
-                    //sw.Flush();
                     fs.Write(fscInBytes);
                     fs.Write(newLine);
                     fs.Write(dictInfo);
@@ -191,7 +185,6 @@ namespace BGUFS
                             pastI = i;
                             temp = SubArray(arr, 0, pastI);
                             string str = Encoding.UTF8.GetString(temp);
-                            Console.WriteLine(str);
                             if (! str.Contains("BGUFS_"))
                             {
                                 Console.WriteLine("Not a BGUFS file");
@@ -400,7 +393,7 @@ namespace BGUFS
         static void Main(string[] args)
         {
             string filePath = "MYBGUFS.dat";
-            string filename1 = @"C:\Users\yoni9\Desktop\testfldr\src\txttest.txt";
+            //string filename1 = @"C:\Users\yoni9\Desktop\testfldr\src\txttest.txt";
             //string filename2 = @"C:\Users\yoni9\Desktop\testfldr\src\pngtest.png"; 
             //string filename3 = @"C:\Users\yoni9\Desktop\testfldr\src\docxtest.docx";
             //string filename4 = @"C:\Users\yoni9\Desktop\testfldr\src\pdftest.pdf";
@@ -422,7 +415,7 @@ namespace BGUFS
             //string fileExractAfterRenameTest = @"C:\Users\yoni9\Desktop\testfldr\target\testExractAfterRename.txt";
             FileSystem fs = new FileSystem();
             fs.create(filePath);
-            fs.add(filePath, filename1);
+            fs.add(filePath, filenameclean1);
             //fs.add(filePath, filename2);
             //fs.dir(filePath);
             //fs.extract(filePath, filename3, target3);
@@ -444,7 +437,7 @@ namespace BGUFS
             //fs.extract(filePath, filenameclean6, target6);
             //fs.dir(filePath);
             //Console.WriteLine("--------------------------------");
-            //fs.remove(filePath, filenameclean4);
+            fs.remove(filePath, filenameclean1);
             //fs.dir(filePath);
             //Console.WriteLine("--------------------------------");
             //fs.remove(filePath, filenameclean4);
@@ -460,6 +453,62 @@ namespace BGUFS
             //Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
             //Console.WriteLine("--------------------------------");
             //fs.extract(filePath, fileRenameTest, fileExractAfterRenameTest);
+
+
+            //////main//////
+            //FileSystem fileSystem = new FileSystem();
+
+            //switch(args[0])
+            //{
+            //    case "-create":
+            //        fileSystem.create(args[1]);
+            //        break;
+
+            //    case "-add":
+            //        fileSystem.add(args[1], args[2]);
+            //        break;
+
+            //    case "-remove":
+            //        fileSystem.remove(args[1], args[2]);
+            //        break;
+
+            //    case "-rename":
+            //        fileSystem.rename(args[1], args[2], args[3]);
+            //        break;
+
+            //    case "-extract":
+            //        fileSystem.extract(args[1], args[2], args[3]);
+            //        break;
+
+            //    case "-dir":
+            //        fileSystem.dir(args[1]);
+            //        break;
+
+            //    case "-hash":
+            //        fileSystem.hash(args[1], args[2]);
+            //        break;
+
+            //    case "-optimize":
+            //        fileSystem.optimize(args[1]);
+            //        break;
+
+            //    case "-sortAB":
+            //        fileSystem.sortAB(args[1]);
+            //        break;
+
+            //    case "-sortDate":
+            //        fileSystem.sortDate(args[1]);
+            //        break;
+
+            //    case "-sortSize":
+            //        fileSystem.sortSize(args[1]);
+            //        break;
+
+            //    case "-addLink":
+            //        fileSystem.addLink(args[1], args[2], args[3]);
+            //        break;
+
+            //}
 
         }
     }
