@@ -11,8 +11,8 @@ namespace BGUFS
     {
         Dictionary<string, FileMetaData> dict;
         //List<byte[]> files;
-        string path;
-        List<int> holeIndexes;
+        List<long> holeIndexes;
+        long startWriterIndex;
 
         public FileSystem()
         {
@@ -22,10 +22,10 @@ namespace BGUFS
         {
             string fileSystemChecker = "BGUFS_";
             dict = new Dictionary<string, FileMetaData>();
-            holeIndexes = new List<int>();
+            holeIndexes = new List<long>();
             try
             {
-                // Create the file, or overwrite if the file exists.
+                // Create the file in append mode
                 using (FileStream fs = new FileStream(fileSystemPath, FileMode.Append, FileAccess.Write))
                 using (StreamWriter sw = new StreamWriter(fs))
                 {
@@ -33,12 +33,33 @@ namespace BGUFS
                     byte[] dictInfo = ObjectToByteArray(dict);
                     byte[] holeBytes = ObjectToByteArray(holeIndexes);
                     byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
+                    int fscLength = fscInBytes.Length;
+                    int dictInfoLength = dictInfo.Length;
+                    int holeBytesLength = holeBytes.Length;
+                    int bytesCounter = 0;
+                    byte[] lineBytes = Encoding.ASCII.GetBytes(fscLength.ToString());
+                    bytesCounter += lineBytes.Length;
+                    lineBytes = Encoding.ASCII.GetBytes(holeBytesLength.ToString());
+                    bytesCounter += lineBytes.Length;
+                    lineBytes = Encoding.ASCII.GetBytes(dictInfoLength.ToString());
+                    bytesCounter += lineBytes.Length;
 
+                    long startWriterIndex = fscLength + dictInfoLength + holeBytesLength + (3 * newLine.Length);
+                    lineBytes = Encoding.ASCII.GetBytes(startWriterIndex.ToString());
+                    bytesCounter += lineBytes.Length;
+                    startWriterIndex += bytesCounter;
+
+                    sw.WriteLine(startWriterIndex);
+                    sw.WriteLine(fscLength.ToString());
+                    sw.WriteLine(dictInfoLength.ToString());
+                    sw.WriteLine(holeBytesLength.ToString());
+                    sw.Flush();
                     fs.Write(fscInBytes);
                     fs.Write(newLine);
                     fs.Write(dictInfo);
                     fs.Write(newLine);
                     fs.Write(holeBytes);
+                    fs.Write(newLine);
                 }
             }
             catch (Exception ex)
@@ -51,66 +72,98 @@ namespace BGUFS
 
         public bool add(string filesystem, string filename)
         {
-            readHeader(filesystem);
-            FileInfo fi = new FileInfo(filename);
-            if (this.dict.ContainsKey(fi.Name))
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            FileInfo fileInfo = new FileInfo(filename);
+            if (this.dict.ContainsKey(fileInfo.Name))
             {
                 Console.WriteLine("file already exist");
                 return false;
             }
+            long fileStartIndex = 0;
+            if (this.dict.Count == 0)
+                fileStartIndex = this.startWriterIndex;
+            else
+                fileStartIndex = readNextAvailable(filesystem);
 
-            int fileStartIndex = this.dict.Count + 3;
-            FileMetaData fmd = new FileMetaData(fi.Name, fi.Length, fi.CreationTime, "regular", fileStartIndex);
-            dict.Add(fi.Name, fmd);
-            Console.WriteLine("before update");
-            update(filesystem);
-            Console.WriteLine("after update");
+            this.startWriterIndex += fileInfo.Length;
+            FileMetaData fmd = new FileMetaData(fileInfo.Name, fileInfo.Length, fileInfo.CreationTime, "regular", fileStartIndex);
+            dict.Add(fileInfo.Name, fmd);
+            update(filesystem, this.startWriterIndex);
             return true;
+        }
+
+        private int readNextAvailable(string filesystem)
+        {
+            using (StreamReader sr = new StreamReader(filesystem))
+            {
+                string line = sr.ReadLine();
+                int nextAvailableIndex = Int32.Parse(line);
+                return nextAvailableIndex;
+            }
         }
 
         public bool remove(string filesystem, string filename)
         {
-            readHeader(filesystem);
-            if (!this.dict.ContainsKey(filename))
+            FileInfo fileInfo = new FileInfo(filename);
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            if (!this.dict.ContainsKey(fileInfo.Name))
             {
                 Console.WriteLine("file does not exist");
                 return false;
             }
-            this.dict.Remove(filename);
-            update(filesystem);
+            FileMetaData fmd;
+            this.dict.TryGetValue(fileInfo.Name, out fmd);
+            this.dict.Remove(fileInfo.Name);
+            //add file to hole
+            holeIndexes.Add(fmd.getStartIndex());
+            update(filesystem, startWriterIndex);
             return true;
         }
 
         public bool rename(string filesystem, string filename, string newfilename)
         {
-            readHeader(filesystem);
-            if (!this.dict.ContainsKey(filename))
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            FileInfo fileInfo = new FileInfo(filename);
+            FileInfo newFileInfo = new FileInfo(newfilename);
+            if (!this.dict.ContainsKey(fileInfo.Name))
             {
                 Console.WriteLine("file does not exist");
                 return false;
             }
-            if (this.dict.ContainsKey(newfilename))
+            if (this.dict.ContainsKey(newFileInfo.Name))
             {
                 Console.WriteLine("file {0} already exists", newfilename);
                 return false;
             }
-            FileMetaData file = this.dict[filename];
-            file.setFileName(newfilename);
-            this.dict.Remove(filename);
-            dict.Add(newfilename, file);
-            update(filesystem);
+            FileMetaData fmd = this.dict[fileInfo.Name];
+            fmd.setFileName(newfilename);
+            this.dict.Remove(fileInfo.Name);
+            //add file to hole
+            holeIndexes.Add(fmd.getStartIndex());
+            dict.Add(newFileInfo.Name, fmd);
+            update(filesystem, startWriterIndex);
             return true;
         }
 
-        public bool extract(string filesystem, string filename, string target)
+        public bool extract(string filesystem, string filename, string extractedfilename)
         {
-            readHeader(filesystem);
-            if (!this.dict.ContainsKey(filename))
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            FileInfo fileInfo = new FileInfo(filename);
+            if (!this.dict.ContainsKey(fileInfo.Name))
             {
                 Console.WriteLine("file does not exist");
                 return false;
             }
-            //DecodeFile(this.dict[filename].getFileData(), target);
+            
+            DecodeFile(EncodeFile(filename), extractedfilename);
             return true;
         }
 
@@ -124,171 +177,105 @@ namespace BGUFS
             return true;
         }
 
-        //private bool update(string fileSystemPath)
-        //{
-        //    string fileSystemChecker = "BGUFS_";
-        //    try
-        //    {
-        //        // Create the file, or overwrite if the file exists.
-        //        using (FileStream fs = new FileStream(fileSystemPath, FileMode.Append, FileAccess.Write))
-        //        using (StreamWriter sw = new StreamWriter(fs))
-        //        {
-        //            byte[] fscInBytes = ObjectToByteArray(fileSystemChecker);
-        //            byte[] dictInfo = ObjectToByteArray(this.dict);
-        //            byte[] holeBytes = ObjectToByteArray(this.holeIndexes);
-        //            //int fscLength = fscInBytes.Length;
-        //            //int dictInfoLength = dictInfo.Length;
-        //            byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
-
-        //            // Add some information to the file.
-        //            //sw.WriteLine(fscLength.ToString());
-        //            //sw.WriteLine(dictInfoLength.ToString());
-        //            //sw.Flush();
-        //            fs.Write(fscInBytes);
-        //            fs.Write(newLine);
-        //            fs.Write(dictInfo);
-        //            fs.Write(newLine);
-        //            fs.Write(holeBytes);
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine(ex.ToString());
-        //        return false;
-        //    }
-        //    return true;
-        //}
-
-        private byte[] SubArray(byte[] data, int index, int length)
-        {
-            byte[] result = new byte[length];
-            Array.Copy(data, index, result, 0, length);
-            return result;
-        }
-
         private bool readHeader(string fileSystemPath)
         {
-            try
+            int bytesCounter = 0;
+            int fscLength = 0;
+            int dictInfoLength = 0;
+            int holeBytesLength = 0;
+            int startReadIndex = 0;
+            byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
+            using (StreamReader sr = new StreamReader(fileSystemPath))
             {
-                // Open the stream and read it back.
-                byte[] arr = File.ReadAllBytes(fileSystemPath);
-                byte[] temp;
-                int counter = 0;
-                int pastI = -1;
-                //char[] arrStr = System.Text.Encoding.UTF8.GetString(arr).ToCharArray();
-                for (int i = 0; i < arr.Length; i++)
-                {
-                    if (arr[i] == 0xA)
-                    {
-                        if (counter == 0)
-                        {
-                            pastI = i;
-                            temp = SubArray(arr, 0, pastI);
-                            string str = Encoding.UTF8.GetString(temp);
-                            if (! str.Contains("BGUFS_"))
-                            {
-                                Console.WriteLine("Not a BGUFS file");
-                                return false;
-                            }
-                        }
-                        else if (counter == 1)
-                        {
-                            temp = SubArray(arr, pastI + 1, i);
-                            pastI = i;
-                            Object dictObj = ByteArrayToObject(temp);
-                            this.dict = (Dictionary<string, FileMetaData>)dictObj;
-                        }
-                        else if (counter == 2)
-                        {
-                            temp = SubArray(arr, pastI + 1, i);
-                            Object listObj = ByteArrayToObject(temp);
-                            this.holeIndexes = (List<int>)listObj;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                        counter++;
-                    }
-                }
+                string line = sr.ReadLine();
+                byte[] lineBytes = Encoding.ASCII.GetBytes(line);
+                bytesCounter += lineBytes.Length;
+                this.startWriterIndex = Int32.Parse(line);
+                bytesCounter += (4 * newLine.Length);
+                line = sr.ReadLine();
+                byte[] line2Bytes = Encoding.ASCII.GetBytes(line);
+                bytesCounter += line2Bytes.Length;
+                fscLength = Int32.Parse(line);
+                line = sr.ReadLine();
+                byte[] line3Bytes = Encoding.ASCII.GetBytes(line);
+                bytesCounter += line3Bytes.Length;
+                dictInfoLength = Int32.Parse(line);
+                line = sr.ReadLine();
+                byte[] line4Bytes = Encoding.ASCII.GetBytes(line);
+                bytesCounter += line4Bytes.Length;
+                holeBytesLength = Int32.Parse(line);
+                sr.Close();
             }
 
-            catch (Exception ex)
+            byte[] fscInBytes = new byte[fscLength];
+            byte[] dictInfo = new byte[dictInfoLength];
+            byte[] holeBytes = new byte[holeBytesLength];
+            startReadIndex = bytesCounter;
+            using (BinaryReader reader = new BinaryReader(new FileStream(fileSystemPath, FileMode.Open)))
             {
-                Console.WriteLine(ex.ToString());
-                return false;
+                reader.BaseStream.Seek(startReadIndex, SeekOrigin.Begin);
+                reader.Read(fscInBytes, 0, fscLength);
+                string str = Encoding.UTF8.GetString(fscInBytes);
+                if (!str.Contains("BGUFS_"))
+                {
+                    Console.WriteLine("Not a BGUFS file");
+                    return false;
+                }
+                startReadIndex = bytesCounter + fscInBytes.Length + newLine.Length;
+                reader.BaseStream.Seek(startReadIndex, SeekOrigin.Begin);
+                reader.Read(dictInfo, 0, dictInfoLength);
+                Object dictObj = ByteArrayToObject(dictInfo);
+                this.dict = (Dictionary<string, FileMetaData>)dictObj;
+                startReadIndex += dictInfoLength + newLine.Length;
+                reader.BaseStream.Seek(startReadIndex, SeekOrigin.Begin);
+                reader.Read(holeBytes, 0, holeBytesLength);
+                Object listObj = ByteArrayToObject(holeBytes);
+                this.holeIndexes = (List<long>)listObj;
+                startReadIndex += holeBytesLength + newLine.Length;
             }
             return true;
         }
 
 
-
-        private bool update(string fileSystemPath)
+        private bool update(string fileSystemPath, long startWriteIndex)
         {
+            string tmpFilePath = "tmp.dat";
+            string fileSystemChecker = "BGUFS_";
             try
             {
-                //create new file = "tmp.dat"
-                //copy old file to new
-                //insted of copy old dict write new  dict in byte[]
-                // " " " holesIndexs " " " " "
-                //delete old file
-                //rename "tmp.dat" => "MYBGUFS.dat"
-                byte[] arr = File.ReadAllBytes(fileSystemPath);
-                string tmpFilePath = "tmp.dat";
-                char[] arrStr = System.Text.Encoding.UTF8.GetString(arr).ToCharArray();
+                // Create the file in append mode
                 using (FileStream fs = new FileStream(tmpFilePath, FileMode.Append, FileAccess.Write))
                 using (StreamWriter sw = new StreamWriter(fs))
                 {
-                    byte[] temp;
-                    int counter = 0;
-                    int pastI = -1;
-                    for (int i = 0; i < arr.Length; i++)
-                    {
-                        if (arr[i] == 0xA)
-                        {
-                            if (counter == 0)
-                            {
-                                pastI = i;
-                                temp = SubArray(arr, 0, pastI);
-                                string str = Encoding.UTF8.GetString(temp);
-                                if (!str.Contains("BGUFS_"))
-                                {
-                                    Console.WriteLine("Not a BGUFS file");
-                                    return false;
-                                }
-                                fs.Write(temp);
-                            }
-                            else if (counter == 1)
-                            {
-                                temp = SubArray(arr, pastI + 1, i);
-                                pastI = i;
-                                fs.Write(ObjectToByteArray(this.dict));
-                            }
-                            else if (counter == 2)
-                            {
-                                temp = SubArray(arr, pastI + 1, i);
-                                pastI = i;
-                                fs.Write(ObjectToByteArray(this.holeIndexes));
-                            }
-                            else
-                            {
-                                temp = SubArray(arr, pastI + 1, i);
-                                pastI = i;
-                                fs.Write(temp);
-                            }
-                            counter++;
-                        }
-                    }
-                }
-                File.Delete(fileSystemPath);
-                File.Move(tmpFilePath, fileSystemPath);
-            }
+                    byte[] fscInBytes = ObjectToByteArray(fileSystemChecker);
+                    byte[] dictInfo = ObjectToByteArray(dict);
+                    byte[] holeBytes = ObjectToByteArray(holeIndexes);
+                    byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
+                    int fscLength = fscInBytes.Length;
+                    int dictInfoLength = dictInfo.Length;
+                    int holeBytesLength = holeBytes.Length;
 
+                    sw.WriteLine(startWriteIndex.ToString()); 
+                    sw.WriteLine(fscLength.ToString());
+                    sw.WriteLine(dictInfoLength.ToString());
+                    sw.WriteLine(holeBytesLength.ToString());
+                    sw.Flush();
+                    fs.Write(fscInBytes);
+                    fs.Write(newLine);
+                    fs.Write(dictInfo);
+                    fs.Write(newLine);
+                    fs.Write(holeBytes);
+                    fs.Write(newLine);
+                }
+            }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.ToString());
                 return false;
             }
+            File.Delete(fileSystemPath);
+            File.Move(tmpFilePath, fileSystemPath);
+
             return true;
         }
 
@@ -328,6 +315,7 @@ namespace BGUFS
             sw.Write(bt64, 0, bt64.Length);
             sw.Close();
         }
+
         private string EncodeFile(string srcfile)
         {
             string dest;
@@ -350,6 +338,7 @@ namespace BGUFS
 
             return ms.ToArray();
         }
+
         //private void ReplaceFile(string FilePath, string NewFilePath)
         //{
         //    using (StreamReader vReader = new StreamReader(FilePath))
@@ -395,63 +384,63 @@ namespace BGUFS
             string filePath = "MYBGUFS.dat";
             //string filename1 = @"C:\Users\yoni9\Desktop\testfldr\src\txttest.txt";
             //string filename2 = @"C:\Users\yoni9\Desktop\testfldr\src\pngtest.png"; 
-            //string filename3 = @"C:\Users\yoni9\Desktop\testfldr\src\docxtest.docx";
-            //string filename4 = @"C:\Users\yoni9\Desktop\testfldr\src\pdftest.pdf";
-            //string filename5 = @"C:\Users\yoni9\Desktop\testfldr\src\pttxtest.pptx";
+            string filename3 = @"C:\Users\user\Downloads\docxtest.docx";
+            string filename4 = @"C:\Users\user\Downloads\pdftest.pdf";
+            string filename5 = @"C:\Users\user\Downloads\pttxtest.pptx";
             //string filename6 = @"C:\Users\yoni9\Desktop\testfldr\src\xslxtest.xlsx";
-            //string target1 = @"C:\Users\yoni9\Desktop\testfldr\target\txttest.txt";
-            //string target2 = @"C:\Users\yoni9\Desktop\testfldr\target\pngtest.png";
+            string target1 = @"C:\Users\user\Downloads\txttest.txt";
+            string target2 = @"C:\Users\\user\Downloads\pngtest.png";
             //string target3 = @"C:\Users\yoni9\Desktop\testfldr\target\docxtest.docx";
             //string target4 = @"C:\Users\yoni9\Desktop\testfldr\target\pdftest.pdf";
             //string target5 = @"C:\Users\yoni9\Desktop\testfldr\target\pttxtest.pptx";
             //string target6 = @"C:\Users\yoni9\Desktop\testfldr\target\xslxtest.xlsx";
             string filenameclean1 = "txttest.txt";
-            string filenameclean2 = "pngtest.png";
-            string filenameclean3 = "docxtest.docx";
-            string filenameclean4 = "pdftest.pdf";
-            string filenameclean5 = "pttxtest.pptx";
-            string filenameclean6 = "xslxtest.xlsx";
+            string filenameclean2 = "QueenOfHearts.png";
+            //string filenameclean3 = "docxtest.docx";
+            //string filenameclean4 = "pdftest.pdf";
+            //string filenameclean5 = "pttxtest.pptx";
+            //string filenameclean6 = "xslxtest.xlsx";
             string fileRenameTest = "testRename1.txt";
             //string fileExractAfterRenameTest = @"C:\Users\yoni9\Desktop\testfldr\target\testExractAfterRename.txt";
             FileSystem fs = new FileSystem();
             fs.create(filePath);
             fs.add(filePath, filenameclean1);
-            //fs.add(filePath, filename2);
-            //fs.dir(filePath);
+            fs.add(filePath, filenameclean2);
+            fs.dir(filePath);
             //fs.extract(filePath, filename3, target3);
             //Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
-            //Console.WriteLine("--------------------------------");
+            Console.WriteLine("--------------------------------");
             //fs.add(filePath, filename1);
             //Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
-            //fs.add(filePath, filename3);
-            //fs.add(filePath, filename4);
-            //fs.add(filePath, filename5);
+            fs.add(filePath, filename3);
+            fs.add(filePath, filename4);
+            fs.add(filePath, filename5);
             //fs.add(filePath, filename6);
-            //fs.dir(filePath);
-            //Console.WriteLine("--------------------------------");
-            //fs.extract(filePath, filenameclean1, target1);
-            //fs.extract(filePath, filenameclean2, target2);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.extract(filePath, filenameclean1, target1);
+            fs.extract(filePath, filenameclean2, target2);
             //fs.extract(filePath, filenameclean3, target3);
             //fs.extract(filePath, filenameclean4, target4);
             //fs.extract(filePath, filenameclean5, target5);
             //fs.extract(filePath, filenameclean6, target6);
             //fs.dir(filePath);
             //Console.WriteLine("--------------------------------");
-            fs.remove(filePath, filenameclean1);
-            //fs.dir(filePath);
-            //Console.WriteLine("--------------------------------");
+            fs.remove(filePath, filename3);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
             //fs.remove(filePath, filenameclean4);
             //Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
             //Console.WriteLine("--------------------------------");
-            //fs.rename(filePath, filenameclean1, fileRenameTest);
-            //fs.dir(filePath);
-            //Console.WriteLine("--------------------------------");
-            //fs.rename(filePath, filenameclean1, fileRenameTest);
-            //Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
-            //Console.WriteLine("--------------------------------");
-            //fs.rename(filePath, filenameclean2, fileRenameTest);
-            //Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
-            //Console.WriteLine("--------------------------------");
+            fs.rename(filePath, filenameclean1, fileRenameTest);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.rename(filePath, filenameclean1, fileRenameTest);
+            Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
+            Console.WriteLine("--------------------------------");
+            fs.rename(filePath, filenameclean2, fileRenameTest);
+            Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
+            Console.WriteLine("--------------------------------");
             //fs.extract(filePath, fileRenameTest, fileExractAfterRenameTest);
 
 
