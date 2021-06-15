@@ -18,10 +18,10 @@ namespace BGUFS
         //private string fileData;
         //private string md5hash;
         //private int lineNum;
-        private long fileStartIndex;
+        //private long fileStartIndex;
 
         // string data, string md5, int line)
-        public FileMetaData(string name, long size, DateTime date, string stat, long startIndex, string linked = null) 
+        public FileMetaData(string name, long size, DateTime date, string stat, string linked = null) 
         {
             this.fileName = name;
             this.fileSize = size;
@@ -31,7 +31,7 @@ namespace BGUFS
             //this.fileData = data;
             //this.md5hash = md5;
             //this.lineNum = line;
-            this.fileStartIndex = startIndex;
+            //this.fileStartIndex = startIndex;
         }
 
         // Setters
@@ -43,7 +43,7 @@ namespace BGUFS
         //public void setMD5(string md5) { this.md5hash = md5; }
         //public void setLineNum(int line) { this.lineNum = line; }
         public void setLinkedFileName(string linked) { this.linkedFileName = linked; }
-        public void setStartIndex(long startIndex) { this.fileStartIndex = startIndex; }
+        //public void setStartIndex(long startIndex) { this.fileStartIndex = startIndex; }
 
         // Getters
         public string getFileName() { return this.fileName; }
@@ -54,7 +54,7 @@ namespace BGUFS
         //public string getMD5() { return this.md5hash; }
         //public int getLineNum() { return this.lineNum; }
         public string getLinkedFileName() { return this.linkedFileName; }
-        public long getStartIndex() { return this.fileStartIndex; }
+        //public long getStartIndex() { return this.fileStartIndex; }
 
         // print method
         public void printFileMetaData()
