@@ -364,56 +364,27 @@ namespace BGUFS
             return true;
         }
 
-        //private bool updateAfterSort(string filesystem, SortedDictionary<string, FileMetaData> sortedDict, long startWriteIndex)
-        //{
-        //    string tmpFilePath = "tmp.dat";
-        //    string fileSystemChecker = "BGUFS_";
-        //    try
-        //    {
-        //        // Create the file in append mode
-        //        using (FileStream fs = new FileStream(tmpFilePath, FileMode.Append, FileAccess.Write))
-        //        using (StreamWriter sw = new StreamWriter(fs))
-        //        {
-        //            byte[] fscInBytes = ObjectToByteArray(fileSystemChecker);
-        //            byte[] dictInfo = ObjectToByteArray(sortedDict);
-        //            byte[] holeBytes = ObjectToByteArray(holeIndexes);
-        //            byte[] newLine = Encoding.ASCII.GetBytes(Environment.NewLine);
-        //            byte[] filesBytes = ObjectToByteArray(files);
-        //            int fscLength = fscInBytes.Length;
-        //            int dictInfoLength = dictInfo.Length;
-        //            int holeBytesLength = holeBytes.Length;
-        //            int filesBytesLength = filesBytes.Length;
+        public bool sortDate(string filesystem)
+        {
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            var sortedDict = from entry in dict orderby entry.Value.getFileDate() ascending select entry;
+            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
+            update(filesystem);
+            return true;
+        }
 
-        //            sw.WriteLine(startWriteIndex.ToString());
-        //            sw.WriteLine(fscLength.ToString());
-        //            sw.WriteLine(dictInfoLength.ToString());
-        //            sw.WriteLine(holeBytesLength.ToString());
-        //            sw.WriteLine(filesBytesLength.ToString());
-        //            sw.Flush();
-        //            fs.Write(fscInBytes);
-        //            fs.Write(newLine);
-        //            fs.Write(dictInfo);
-        //            fs.Write(newLine);
-        //            fs.Write(holeBytes);
-        //            fs.Write(newLine);
-        //            fs.Write(filesBytes);
-        //            foreach (string key in files.Keys)
-        //            {
-        //                string val = this.files[key];
-        //                sw.WriteLine(val);
-        //            }
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine(ex.ToString());
-        //        return false;
-        //    }
-        //    File.Delete(filesystem);
-        //    File.Move(tmpFilePath, filesystem);
-
-        //    return true;
-        //}
+        public bool sortSize(string filesystem)
+        {
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            var sortedDict = from entry in dict orderby entry.Value.getFileSize() ascending select entry;
+            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
+            update(filesystem);
+            return true;
+        }
 
         private void DecodeFile(string srcfile, string destfile)
         {
@@ -472,6 +443,7 @@ namespace BGUFS
             string filenameclean1 = "txttest.txt";
             string filenameclean2 = "QueenOfHearts.png";
             string fileRenameTest = "testRename1.txt";
+            string filenameclean3 = "csvtest.csv";
             string fileExractAfterRenameTest = @"C:\Users\user\Downloads\testExractAfterRename.txt";
             FileSystem fs = new FileSystem();
             fs.create(filePath);
@@ -506,7 +478,17 @@ namespace BGUFS
             Console.WriteLine("--------------------------------");
             fs.sortAB(filePath);
             fs.dir(filePath);
-            
+            Console.WriteLine("--------------------------------");
+            fs.sortDate(filePath);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.sortSize(filePath);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.add(filePath, filenameclean3);
+            fs.sortAB(filePath);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
 
             //////main//////
             //FileSystem fileSystem = new FileSystem();
