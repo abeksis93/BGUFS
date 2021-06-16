@@ -184,6 +184,14 @@ namespace BGUFS
             //holeIndexes.Add(fmd.getStartIndex());
             files.Add(newfilename, fileData);
             dict.Add(newfilename, fmd);
+            foreach (string key in this.dict.Keys)
+            {
+                string linkname = this.dict[key].getStatus();
+                if (linkname.Equals("link") && linkname.Equals(fileInfo.Name))
+                {
+                    this.dict[key].setLinkedFileName(newfilename);
+                }
+            }
             //FileMetaData fmd = this.dict[fileInfo.Name];
             //fmd.setFileName(newFileInfo.Name);
             ////this.dict[fileInfo.Name].setWasDeleted(true);
@@ -221,8 +229,12 @@ namespace BGUFS
                 Console.WriteLine("file does not exist");
                 return false;
             }
-            
-            DecodeFile(this.files[filename], extractedfilename);
+            string filetoextract = fileInfo.Name;
+            if ((this.dict[fileInfo.Name].getStatus()).Equals("link"))
+            {
+                filetoextract = this.dict[fileInfo.Name].getLinkedFileName();
+            }
+            DecodeFile(this.files[filetoextract], extractedfilename);
             return true;
         }
 
@@ -517,6 +529,7 @@ namespace BGUFS
             string filename6 = @"C:\Users\yoni9\Desktop\testfldr\src\xslxtest.xlsx";
             string target1 = @"C:\Users\yoni9\Desktop\testfldr\target\txttest.txt";
             string target2 = @"C:\Users\yoni9\Desktop\testfldr\target\pngtest.png";
+            string target2_0 = @"C:\Users\yoni9\Desktop\testfldr\target\pngtest_copy_extracted_from_link.png";
             string target3 = @"C:\Users\yoni9\Desktop\testfldr\target\docxtest.docx";
             string target4 = @"C:\Users\yoni9\Desktop\testfldr\target\pdftest.pdf";
             string target5 = @"C:\Users\yoni9\Desktop\testfldr\target\pttxtest.pptx";
@@ -595,6 +608,7 @@ namespace BGUFS
             fs.dir(filePath);
             Console.WriteLine("--------------------------------");
             fs.remove(filePath, filenameclean3);
+            fs.extract(filePath, filenameclean2, target2_0);
             fs.dir(filePath);
             Console.WriteLine("--------------------------------");
 
