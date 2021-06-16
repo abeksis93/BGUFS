@@ -142,7 +142,8 @@ namespace BGUFS
             FileMetaData fmd;
             this.dict.TryGetValue(fileInfo.Name, out fmd);
             this.dict.Remove(fileInfo.Name);
-            this.files[fileInfo.Name] = null;
+            if (!(fmd.getStatus()).Equals("link"))
+                this.files[fileInfo.Name] = null;
             foreach (string key in this.dict.Keys)
             {
                 string linkname = this.dict[key].getLinkedFileName();
