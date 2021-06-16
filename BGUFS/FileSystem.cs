@@ -8,6 +8,7 @@ using System.Linq;
 
 namespace BGUFS
 {
+    [Serializable]
     class FileSystem
     {
         Dictionary<string, FileMetaData> dict;
@@ -21,7 +22,7 @@ namespace BGUFS
 
         public bool create(string fileSystemPath)
         {
-            string fileSystemChecker = "BGUFS_";
+            string fileSystemChecker = "BGUFS";
             dict = new Dictionary<string, FileMetaData>();
             //holeIndexes = new List<long>();
             files = new Dictionary<string, string>();
@@ -85,6 +86,7 @@ namespace BGUFS
             if (!exists)
                 return false;
             FileInfo fileInfo = new FileInfo(filename);
+
             if (this.dict.ContainsKey(fileInfo.Name))
             {
                 Console.WriteLine("file already exist");
@@ -97,6 +99,12 @@ namespace BGUFS
             //    fileStartIndex = readNextAvailable(filesystem);
 
             //this.startWriterIndex += fileInfo.Length;
+            string val;
+            this.files.TryGetValue(fileInfo.Name, out val);
+            if (this.files.ContainsKey(fileInfo.Name))
+            {
+                this.files.Remove(fileInfo.Name);
+            }
             FileMetaData fmd = new FileMetaData(fileInfo.Name, fileInfo.Length, fileInfo.CreationTime, "regular");
             dict.Add(fileInfo.Name, fmd);
             using (FileStream fs = new FileStream(filesystem, FileMode.Append, FileAccess.Write))
@@ -120,7 +128,7 @@ namespace BGUFS
         //    }
         //}
 
-        public bool remove(string filesystem, string filename)   //TODO add remove links
+        public bool remove(string filesystem, string filename)   
         {
             FileInfo fileInfo = new FileInfo(filename);
             bool exists = readHeader(filesystem);
@@ -134,6 +142,15 @@ namespace BGUFS
             FileMetaData fmd;
             this.dict.TryGetValue(fileInfo.Name, out fmd);
             this.dict.Remove(fileInfo.Name);
+            this.files[fileInfo.Name] = null;
+            foreach (string key in this.dict.Keys)
+            {
+                string linkname = this.dict[key].getLinkedFileName();
+                if (linkname != null && linkname.Equals(fileInfo.Name))
+                {
+                    this.dict.Remove(key);
+                }
+            }
             //add file to hole
             //holeIndexes.Add(fmd.getStartIndex());
             update(filesystem);
@@ -147,24 +164,48 @@ namespace BGUFS
                 return false;
             FileInfo fileInfo = new FileInfo(filename);
             FileInfo newFileInfo = new FileInfo(newfilename);
-            if (!this.dict.ContainsKey(fileInfo.Name))
+            if (!this.dict.ContainsKey(filename))
             {
                 Console.WriteLine("file does not exist");
                 return false;
             }
-            if (this.dict.ContainsKey(newFileInfo.Name))
+            if (this.dict.ContainsKey(newfilename))
             {
                 Console.WriteLine("file {0} already exists", newfilename);
                 return false;
             }
-            FileMetaData fmd = this.dict[fileInfo.Name];
+            FileMetaData fmd = this.dict[filename];
             fmd.setFileName(newfilename);
-            this.dict.Remove(fileInfo.Name);
-            this.files.Remove(fileInfo.Name);
+            this.dict.Remove(filename);
+            string fileData = this.files[fileInfo.Name];
+            this.files.Remove(filename);
+
             //add file to hole
             //holeIndexes.Add(fmd.getStartIndex());
-            files.Add(newFileInfo.Name, EncodeFile(filename));
-            dict.Add(newFileInfo.Name, fmd);
+            files.Add(newfilename, fileData);
+            dict.Add(newfilename, fmd);
+            //FileMetaData fmd = this.dict[fileInfo.Name];
+            //fmd.setFileName(newFileInfo.Name);
+            ////this.dict[fileInfo.Name].setWasDeleted(true);
+
+
+            ////string val;
+            ////this.files.TryGetValue(newfilename, out val);
+            //if (this.files.ContainsKey(newfilename))
+            //{
+            //    string fileData = this.files[fileInfo.Name];
+            //    if (this.files[newfilename] == null)
+            //    {
+            //        this.files[newfilename] = fileData;
+            //    }
+            //    else
+            //    {
+            //        this.files.Remove(fileInfo.Name);
+            //        files.Add(newfilename, fileData);
+            //    }
+            //}
+
+            //dict.Add(newfilename, fmd);
             update(filesystem);
             return true;
         }
@@ -207,6 +248,75 @@ namespace BGUFS
                 return null;
             }
             return generateMD5Hash(filename);
+        }
+
+        public bool optimize(string filesystem)
+        {
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            foreach (string key in this.dict.Keys)
+            {
+                if (this.files[key] == null)
+                {
+                    this.files.Remove(key);
+                }
+            }
+            return true;
+        }
+
+        public bool sortAB(string filesystem)
+        {
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            SortedDictionary<string, FileMetaData> sortedDict = new SortedDictionary<string, FileMetaData>(this.dict);
+            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
+            update(filesystem);
+            return true;
+        }
+
+        public bool sortDate(string filesystem)
+        {
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            var sortedDict = from entry in dict orderby entry.Value.getFileDate() ascending select entry;
+            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
+            update(filesystem);
+            return true;
+        }
+
+        public bool sortSize(string filesystem)
+        {
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            var sortedDict = from entry in dict orderby entry.Value.getFileSize() ascending select entry;
+            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
+            update(filesystem);
+            return true;
+        }
+
+        public bool addLink(string filesystem, string linkfilename, string existingfilename)
+        {
+            bool exists = readHeader(filesystem);
+            if (!exists)
+                return false;
+            if (this.dict.ContainsKey(linkfilename))
+            {
+                Console.WriteLine("file already exists");
+                return false;
+            }
+            if (!this.dict.ContainsKey(existingfilename))
+            {
+                Console.WriteLine("file does not exist");
+                return false;
+            }
+            FileMetaData fmd = new FileMetaData(linkfilename, this.dict[existingfilename].getFileSize(), this.dict[existingfilename].getFileDate(), "link", existingfilename);
+            this.dict.Add(linkfilename, fmd);
+            update(filesystem);
+            return true;
         }
 
         private bool readHeader(string fileSystemPath)
@@ -254,7 +364,7 @@ namespace BGUFS
                 reader.BaseStream.Seek(startReadIndex, SeekOrigin.Begin);
                 reader.Read(fscInBytes, 0, fscLength);
                 string str = Encoding.UTF8.GetString(fscInBytes);
-                if (!str.Contains("BGUFS_"))
+                if (!str.Contains("BGUFS"))
                 {
                     Console.WriteLine("Not a BGUFS file");
                     return false;
@@ -282,7 +392,7 @@ namespace BGUFS
         private bool update(string fileSystemPath)
         {
             string tmpFilePath = "tmp.dat";
-            string fileSystemChecker = "BGUFS_";
+            string fileSystemChecker = "BGUFS";
             try
             {
                 // Create the file in append mode
@@ -314,8 +424,11 @@ namespace BGUFS
                     fs.Write(filesBytes);
                     foreach (string key in files.Keys)
                     {
-                        string val = this.files[key];
-                        sw.WriteLine(val);
+                        if (this.files[key] != null)
+                        {
+                            string val = this.files[key];
+                            sw.WriteLine(val);
+                        }
                     }
                 }
             }
@@ -348,43 +461,6 @@ namespace BGUFS
             }
         }
 
-        public void optimize(string filesystem)
-        {
-            //TODO
-        }
-
-        public bool sortAB(string filesystem)
-        {
-            bool exists = readHeader(filesystem);
-            if (!exists)
-                return false;
-            SortedDictionary<string, FileMetaData> sortedDict = new SortedDictionary<string, FileMetaData>(this.dict);
-            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
-            update(filesystem);
-            return true;
-        }
-
-        public bool sortDate(string filesystem)
-        {
-            bool exists = readHeader(filesystem);
-            if (!exists)
-                return false;
-            var sortedDict = from entry in dict orderby entry.Value.getFileDate() ascending select entry;
-            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
-            update(filesystem);
-            return true;
-        }
-
-        public bool sortSize(string filesystem)
-        {
-            bool exists = readHeader(filesystem);
-            if (!exists)
-                return false;
-            var sortedDict = from entry in dict orderby entry.Value.getFileSize() ascending select entry;
-            this.dict = sortedDict.ToDictionary(pair => pair.Key, pair => pair.Value);
-            update(filesystem);
-            return true;
-        }
 
         private void DecodeFile(string srcfile, string destfile)
         {
@@ -400,7 +476,6 @@ namespace BGUFS
 
         private string EncodeFile(string srcfile)
         {
-            string dest;
             FileStream sr = new FileStream(srcfile, FileMode.Open);
             byte[] srcbt = new byte[sr.Length];
             sr.Read(srcbt, 0, (int)sr.Length);
@@ -413,11 +488,9 @@ namespace BGUFS
         {
             if (obj == null)
                 return null;
-
             BinaryFormatter bf = new BinaryFormatter();
             MemoryStream ms = new MemoryStream();
             bf.Serialize(ms, obj);
-
             return ms.ToArray();
         }
 
@@ -432,46 +505,73 @@ namespace BGUFS
 
             return obj;
         }
+
         static void Main(string[] args)
         {
             string filePath = "MYBGUFS.dat";
-            string filename3 = @"C:\Users\user\Downloads\docxtest.docx";
-            string filename4 = @"C:\Users\user\Downloads\pdftest.pdf";
-            string filename5 = @"C:\Users\user\Downloads\pttxtest.pptx";
-            string target1 = @"C:\Users\user\Downloads\txttest.txt";
-            string target2 = @"C:\Users\\user\Downloads\pngtest.png";
+            string filename1 = @"C:\Users\yoni9\Desktop\testfldr\src\txttest.txt";
+            string filename2 = @"C:\Users\yoni9\Desktop\testfldr\src\pngtest.png";
+            string filename3 = @"C:\Users\yoni9\Desktop\testfldr\src\docxtest.docx";
+            string filename4 = @"C:\Users\yoni9\Desktop\testfldr\src\pdftest.pdf";
+            string filename5 = @"C:\Users\yoni9\Desktop\testfldr\src\pttxtest.pptx";
+            string filename6 = @"C:\Users\yoni9\Desktop\testfldr\src\xslxtest.xlsx";
+            string target1 = @"C:\Users\yoni9\Desktop\testfldr\target\txttest.txt";
+            string target2 = @"C:\Users\yoni9\Desktop\testfldr\target\pngtest.png";
+            string target3 = @"C:\Users\yoni9\Desktop\testfldr\target\docxtest.docx";
+            string target4 = @"C:\Users\yoni9\Desktop\testfldr\target\pdftest.pdf";
+            string target5 = @"C:\Users\yoni9\Desktop\testfldr\target\pttxtest.pptx";
+            string target6 = @"C:\Users\yoni9\Desktop\testfldr\target\xslxtest.xlsx";
             string filenameclean1 = "txttest.txt";
-            string filenameclean2 = "QueenOfHearts.png";
+            string filenameclean2 = "pngtest.png";
+            string filenameclean3 = "docxtest.docx";
+            string filenameclean4 = "pdftest.pdf";
+            string filenameclean5 = "pttxtest.pptx";
+            string filenameclean6 = "xslxtest.xlsx";
             string fileRenameTest = "testRename1.txt";
-            string filenameclean3 = "csvtest.csv";
-            string fileExractAfterRenameTest = @"C:\Users\user\Downloads\testExractAfterRename.txt";
+            string linktest2 = "pngtestlink";
+            string linktest3 = "docxtestlink";
+            string fileExractAfterRenameTest = @"C:\Users\yoni9\Desktop\testfldr\target\testExractAfterRename.txt";
             FileSystem fs = new FileSystem();
             fs.create(filePath);
-            fs.add(filePath, filenameclean1);
-            fs.add(filePath, filenameclean2);
+            fs.add(filePath, filename1);
+            fs.add(filePath, filename2);
             fs.dir(filePath);
+            fs.extract(filePath, filename3, target3);
+            Console.WriteLine(" ^^^^ Shuold print Error1 ^^^^ ");
             Console.WriteLine("--------------------------------");
+            fs.add(filePath, filename1);
+            Console.WriteLine(" ^^^^ Shuold print Error2 ^^^^ ");
             fs.add(filePath, filename3);
             fs.add(filePath, filename4);
             fs.add(filePath, filename5);
+            fs.add(filePath, filename6);
             fs.dir(filePath);
             Console.WriteLine("--------------------------------");
             fs.extract(filePath, filenameclean1, target1);
             fs.extract(filePath, filenameclean2, target2);
-            fs.remove(filePath, filename3);
+            fs.extract(filePath, filenameclean3, target3);
+            fs.extract(filePath, filenameclean4, target4);
+            fs.extract(filePath, filenameclean5, target5);
+            fs.extract(filePath, filenameclean6, target6);
             fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.remove(filePath, filenameclean4);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.remove(filePath, filenameclean4);
+            Console.WriteLine(" ^^^^ Shuold print Error3 ^^^^ ");
             Console.WriteLine("--------------------------------");
             fs.rename(filePath, filenameclean1, fileRenameTest);
             fs.dir(filePath);
             Console.WriteLine("--------------------------------");
             fs.rename(filePath, filenameclean1, fileRenameTest);
-            Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
+            Console.WriteLine(" ^^^^ Shuold print Error4 ^^^^ ");
             Console.WriteLine("--------------------------------");
             fs.rename(filePath, filenameclean2, fileRenameTest);
-            Console.WriteLine(" ^^^^ Shuold print Error ^^^^ ");
+            Console.WriteLine(" ^^^^ Shuold print Error5 ^^^^ ");
             Console.WriteLine("--------------------------------");
             fs.extract(filePath, fileRenameTest, fileExractAfterRenameTest);
-            string hash = fs.hash(filePath, filename4);
+            string hash = fs.hash(filePath, filenameclean5);
             Console.WriteLine(hash);
             string hash2 = fs.hash(filePath, filenameclean2);
             Console.WriteLine(hash2);
@@ -487,6 +587,14 @@ namespace BGUFS
             Console.WriteLine("--------------------------------");
             fs.add(filePath, filenameclean3);
             fs.sortAB(filePath);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.optimize(filePath);
+            fs.addLink(filePath, linktest2, filenameclean2);
+            fs.addLink(filePath, linktest3, filenameclean3);
+            fs.dir(filePath);
+            Console.WriteLine("--------------------------------");
+            fs.remove(filePath, filenameclean3);
             fs.dir(filePath);
             Console.WriteLine("--------------------------------");
 
